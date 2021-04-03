@@ -2,6 +2,7 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import absolute_import
 
+import json
 import numpy as np
 import torch
 import torch.nn as nn
@@ -467,3 +468,46 @@ def testavimas():
   print(detector_losses)
   print(proposal_losses)
   show_image_boxes(torch.from_numpy(show_img), detections)
+
+
+def get_api_result(path):
+  url = '/content/drive/My Drive/GMM/'
+  img_path = os.path.join(url, path)
+  img = cv2.imread(img_path)
+  img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+  show_img = img
+
+  targets = np.load(MOCK_TARGETS_PATH, allow_pickle=True).tolist()
+  annots = np.zeros((0, 5))
+  for i, a in enumerate(targets):
+    annot = np.zeros((1, 5))
+    annot[0, 0] = a[0]
+    annot[0, 1] = a[1]
+    annot[0, 2] = a[2]
+    annot[0, 3] = a[3]
+    annot[0, 4] = a[4]
+    annots = np.append(annots, annot, axis=0)
+  sample = {'img': img, 'annot': annots}
+  sample = transform_test(sample)
+  sample['img'] = sample['img'].permute(2, 0, 1)
+  imgList = []
+  imgList.append(sample['img'])
+  targList = []
+  targList.append(sample['annot'])
+
+  model = ThunderNet().to(device)
+  load_model(model, epoch_number=3)
+  detections, detector_losses, proposal_losses = model(torch.stack(imgList).cuda().float(), torch.stack(targList))
+
+  result = []
+  for i in range(len(detections)):
+    boxes = detections[i]['boxes'].detach().cpu().numpy()
+    labels = detections[i]['labels'].detach().cpu().numpy()
+    scores = detections[i]['scores'].detach().cpu().numpy()
+    boxes_str = np.array2string(boxes, precision=5, separator=',', suppress_small=True)
+    labels_str = np.array2string(labels, precision=5, separator=',', suppress_small=True)
+    scores_str = np.array2string(scores, precision=5, separator=',', suppress_small=True)
+    result.append({'boxes': boxes_str, 'labels': labels_str, 'scores': scores_str})
+
+  return json.dumps(result)
